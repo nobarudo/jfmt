@@ -1,47 +1,41 @@
-/*
-Copyright © 2026 NAME HERE <EMAIL ADDRESS>
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
-*/
 package cmd
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
 	"os"
+	"regexp"
 
 	"github.com/spf13/cobra"
 )
 
+var colorize bool
 
-
-// rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   "jfmt",
-	Short: "A brief description of your application",
-	Long: `A longer description that spans multiple lines and likely contains
-examples and usage of using your application. For example:
+	Use:   "jsonfmt",
+	Short: "標準入力からJSONを受け取り、見やすく整形します",
+	Long:  `パイプ経由で渡されたJSONデータを読み込み、インデントを整えて出力するCLIツールです。`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		input, err := readStdin()
+		if err != nil {
+			return err
+		}
 
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
-	// Uncomment the following line if your bare application
-	// has an action associated with it:
-	// Run: func(cmd *cobra.Command, args []string) { },
+		var out bytes.Buffer
+		if err := json.Indent(&out, input, "", "  "); err != nil {
+			return fmt.Errorf("JSONの解析に失敗しました: %w", err)
+		}
+
+		result := out.String()
+		if colorize {
+			result = applyColor(result)
+		}
+
+		fmt.Println(result)
+		return nil
+	},
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -54,15 +48,34 @@ func Execute() {
 }
 
 func init() {
-	// Here you will define your flags and configuration settings.
-	// Cobra supports persistent flags, which, if defined here,
-	// will be global for your application.
-
-	// rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.jfmt.yaml)")
-
-	// Cobra also supports local flags, which will only run
-	// when this action is called directly.
-	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	rootCmd.Flags().BoolVarP(&colorize, "color", "c", false, "シンタックスハイライトを有効にする")
 }
 
+// readStdin はパイプからの標準入力を読み取ります
+func readStdin() ([]byte, error) {
+	stat, _ := os.Stdin.Stat()
+	if (stat.Mode() & os.ModeCharDevice) != 0 {
+		return nil, fmt.Errorf("エラー: 標準入力が空です。 'curl ... | jsonfmt' のようにパイプを使用してください")
+	}
+	return io.ReadAll(os.Stdin)
+}
 
+func applyColor(j string) string {
+	reKey := regexp.MustCompile(`"(.*?)":`)
+	reString := regexp.MustCompile(`:\s*"(.*?)"`)
+	reNum := regexp.MustCompile(`:\s*([-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?)`)
+	reBool := regexp.MustCompile(`:\s*(true|false|null)`)
+
+	cyan := "\033[36m"
+	green := "\033[32m"
+	magenta := "\033[35m"
+	yellow := "\033[33m"
+	reset := "\033[0m"
+
+	j = reKey.ReplaceAllString(j, cyan+`"$1"`+reset+":")
+	j = reString.ReplaceAllString(j, ": "+green+`"$1"`+reset)
+	j = reNum.ReplaceAllString(j, ": "+magenta+`$1`+reset)
+	j = reBool.ReplaceAllString(j, ": "+yellow+`$1`+reset)
+
+	return j
+}
