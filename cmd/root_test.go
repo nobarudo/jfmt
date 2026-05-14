@@ -2,10 +2,24 @@ package cmd
 
 import (
 	"bytes"
+	"os"
 	"testing"
 )
 
 func TestRootCmd(t *testing.T) {
+	// Create a temporary file for testing file input
+	tmpFile, err := os.CreateTemp("", "test*.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	content := `{"file": "test"}`
+	if _, err := tmpFile.WriteString(content); err != nil {
+		t.Fatal(err)
+	}
+	tmpFile.Close()
+
 	tests := []struct {
 		name        string
 		input       string
@@ -14,11 +28,24 @@ func TestRootCmd(t *testing.T) {
 		expectErr   bool
 	}{
 		{
-			name:        "Valid JSON format",
+			name:        "Valid JSON from Stdin",
 			input:       `{"name":"test","value":1}`,
 			args:        []string{},
 			expectedOut: "{\n  \"name\": \"test\",\n  \"value\": 1\n}\n",
 			expectErr:   false,
+		},
+		{
+			name:        "Valid JSON from File",
+			input:       "",
+			args:        []string{tmpFile.Name()},
+			expectedOut: "{\n  \"file\": \"test\"\n}\n",
+			expectErr:   false,
+		},
+		{
+			name:      "File Not Found",
+			input:     "",
+			args:      []string{"nonexistent.json"},
+			expectErr: true,
 		},
 		{
 			name:      "Invalid JSON",

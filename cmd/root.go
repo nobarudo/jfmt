@@ -14,11 +14,27 @@ import (
 var colorize bool
 
 var rootCmd = &cobra.Command{
-	Use:   "jsonfmt",
-	Short: "標準入力からJSONを受け取り、見やすく整形します",
-	Long:  `パイプ経由で渡されたJSONデータを読み込み、インデントを整えて出力するCLIツールです。`,
+	Use:   "jsonfmt [file]",
+	Short: "JSONを受け取り、見やすく整形します",
+	Long:  `ファイルまたはパイプ経由の標準入力からJSONデータを読み込み、インデントを整えて出力します。`,
+	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		input, err := readInput(cmd.InOrStdin())
+		var inputReader io.Reader
+
+		if len(args) > 0 {
+			// ファイルから読み込む
+			file, err := os.Open(args[0])
+			if err != nil {
+				return fmt.Errorf("ファイルを読み込めませんでした: %w", err)
+			}
+			defer file.Close()
+			inputReader = file
+		} else {
+			// 標準入力から読み込む
+			inputReader = cmd.InOrStdin()
+		}
+
+		input, err := readInput(inputReader)
 		if err != nil {
 			return err
 		}
@@ -53,10 +69,11 @@ func init() {
 
 // readInput は指定されたリーダーからデータを読み取ります
 func readInput(r io.Reader) ([]byte, error) {
-	if f, ok := r.(*os.File); ok {
+	// os.Stdin の場合のみ、空チェック（CharDeviceチェック）を行う
+	if f, ok := r.(*os.File); ok && f == os.Stdin {
 		stat, err := f.Stat()
 		if err == nil && (stat.Mode()&os.ModeCharDevice) != 0 {
-			return nil, fmt.Errorf("エラー: 標準入力が空です。 'curl ... | jsonfmt' のようにパイプを使用してください")
+			return nil, fmt.Errorf("エラー: 入力がありません。 'jsonfmt file.json' または 'curl ... | jsonfmt' のように使用してください")
 		}
 	}
 	return io.ReadAll(r)

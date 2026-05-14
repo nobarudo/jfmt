@@ -2,10 +2,24 @@ package cmd
 
 import (
 	"bytes"
+	"os"
 	"testing"
 )
 
 func TestMinifyCmd(t *testing.T) {
+	// Create a temporary file for testing file input
+	tmpFile, err := os.CreateTemp("", "test*.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	content := `{"file": "test"}`
+	if _, err := tmpFile.WriteString(content); err != nil {
+		t.Fatal(err)
+	}
+	tmpFile.Close()
+
 	tests := []struct {
 		name        string
 		input       string
@@ -14,13 +28,20 @@ func TestMinifyCmd(t *testing.T) {
 		expectErr   bool
 	}{
 		{
-			name: "Valid JSON format",
+			name: "Valid JSON from Stdin",
 			input: `{
   "name": "test",
   "value": 1
 }`,
 			args:        []string{"minify"},
 			expectedOut: `{"name":"test","value":1}` + "\n",
+			expectErr:   false,
+		},
+		{
+			name:        "Valid JSON from File",
+			input:       "",
+			args:        []string{"minify", tmpFile.Name()},
+			expectedOut: `{"file":"test"}` + "\n",
 			expectErr:   false,
 		},
 		{
