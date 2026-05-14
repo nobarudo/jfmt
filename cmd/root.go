@@ -18,7 +18,7 @@ var rootCmd = &cobra.Command{
 	Short: "標準入力からJSONを受け取り、見やすく整形します",
 	Long:  `パイプ経由で渡されたJSONデータを読み込み、インデントを整えて出力するCLIツールです。`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		input, err := readStdin()
+		input, err := readInput(cmd.InOrStdin())
 		if err != nil {
 			return err
 		}
@@ -33,7 +33,7 @@ var rootCmd = &cobra.Command{
 			result = applyColor(result)
 		}
 
-		fmt.Println(result)
+		fmt.Fprintln(cmd.OutOrStdout(), result)
 		return nil
 	},
 }
@@ -51,13 +51,15 @@ func init() {
 	rootCmd.Flags().BoolVarP(&colorize, "color", "c", false, "シンタックスハイライトを有効にする")
 }
 
-// readStdin はパイプからの標準入力を読み取ります
-func readStdin() ([]byte, error) {
-	stat, _ := os.Stdin.Stat()
-	if (stat.Mode() & os.ModeCharDevice) != 0 {
-		return nil, fmt.Errorf("エラー: 標準入力が空です。 'curl ... | jsonfmt' のようにパイプを使用してください")
+// readInput は指定されたリーダーからデータを読み取ります
+func readInput(r io.Reader) ([]byte, error) {
+	if f, ok := r.(*os.File); ok {
+		stat, err := f.Stat()
+		if err == nil && (stat.Mode()&os.ModeCharDevice) != 0 {
+			return nil, fmt.Errorf("エラー: 標準入力が空です。 'curl ... | jsonfmt' のようにパイプを使用してください")
+		}
 	}
-	return io.ReadAll(os.Stdin)
+	return io.ReadAll(r)
 }
 
 func applyColor(j string) string {

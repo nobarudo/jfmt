@@ -13,7 +13,7 @@ var minifyCmd = &cobra.Command{
 	Short: "JSONを1行のテキストに圧縮します",
 	Long:  `JSON内の余計な空白や改行をすべて削除し、1行のコンパクトな文字列として出力します。`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		input, err := readStdin() // root.go で定義した共通関数を使用
+		input, err := readInput(cmd.InOrStdin())
 		if err != nil {
 			return err
 		}
@@ -23,7 +23,7 @@ var minifyCmd = &cobra.Command{
 			return fmt.Errorf("JSONの解析に失敗しました: %w", err)
 		}
 
-		fmt.Println(out.String())
+		fmt.Fprintln(cmd.OutOrStdout(), out.String())
 		return nil
 	},
 }
